@@ -1,11 +1,23 @@
 import express from "express";
 import User from "./models/user.js";
+import Loans from "./models/loans.js";
+import Saving from "./models/saving.js";
 import bcrypt from "bcrypt";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 2. Dapat mencatat transaksi simpanan anggota (pokok, wajib, sukarela).
+// 3. Dapat memproses dan menyetujui pengajuan pinjaman anggota.
+// 4. Dapat mengatur suku bunga pinjaman dan denda keterlambatan.
+// 5. Dapat mencatat pembayaran angsuran.
+
+// ==============================================
+// INI PAS UTS                                  |
+// ==============================================
+
+// mendapatkan jumlah user dalam aplikasi
 app.get("/users/count", async (req, res) => {
   try {
     const CountUsers = await User.countDocuments({ role: "user" });
@@ -16,6 +28,8 @@ app.get("/users/count", async (req, res) => {
   }
 });
 
+
+// mendapatkan seluruh user dalam aplikasi
 app.get("/users", async (req, res) => {
   try {
     const AllUser = await User.find({ role: "user" });
@@ -27,6 +41,7 @@ app.get("/users", async (req, res) => {
   }
 });
 
+// user dapat melakukan pendaftaran akun
 app.post("/users/register", async (req, res) => {
   const { email, password } = req.body;
 
@@ -68,6 +83,7 @@ app.post("/users/register", async (req, res) => {
   }
 });
 
+// user dapat melakukan login
 app.post("/users/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -96,18 +112,19 @@ app.post("/users/login", async (req, res) => {
     if (user.role === "admin") {
       return res
         .status(200)
-        .json({ success: true, message: "Welcome back admin!", isAdmin: true });
+        .json({ success: true, message: "Welcome back admin!", isAdmin: true, user_id: user._id});
     }
 
     return res
       .status(200)
-      .json({ success: true, message: "Welcome Back!", isAdmin: false });
+      .json({ success: true, message: "Welcome Back!", isAdmin: false, user_id: user._id });
   } catch (error) {
     console.error("Login error:", error);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
+// admin daoat menghapus user pada manageUserPage
 app.delete("/users/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -130,6 +147,7 @@ app.delete("/users/:id", async (req, res) => {
   }
 });
 
+// update informasi user pada sisi admin
 app.put("/users/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -164,4 +182,14 @@ app.put("/users/:id", async (req, res) => {
 
 app.listen(3000, () => {
   console.log("server is running");
+});
+
+// ==============================================
+// Backend untuk fitur ke 2                     |
+// ==============================================
+
+// user bisa melakukan simpanan pokok, wajib, dan sukarela
+app.post("/users/melakukan-simpanan/:id", async (req, res) => {
+
+
 });

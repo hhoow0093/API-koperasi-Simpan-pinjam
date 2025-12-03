@@ -5,7 +5,11 @@ const LoanSchema = new mongoose.Schema({
     typeOfLoans: { type: String, required: true },
     totalOfLoans: { type: Number },
     createdAt: { type: Date, default: Date.now },
-    member_loan: { type: User, required: true },
+    member_loan: {
+        type: mongoose.Types.ObjectId,
+        required: true,
+        ref: "User"
+    },
     fine: { type: Number },
     interest: {type: Number}
 });

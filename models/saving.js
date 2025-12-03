@@ -5,7 +5,11 @@ const SavingSchema = new mongoose.Schema({
     typeOfSaves: { type: String, required: true },
     totalSaving: { type: Number },
     createdAt: { type: Date, default: Date.now },
-    member_loan: { type: User, required: true },
+    member_saving: {
+        type: mongoose.Types.ObjectId,
+        required: true,
+        ref: "User",
+    },
 });
 
 const Saving = mongoose.model("Saving", SavingSchema);
