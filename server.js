@@ -271,29 +271,51 @@ app.post("/pinjaman/apply", async (req, res) => {
   }
 });
 
-// GET /pinjaman/active/:userId → get active loan
+// GET /pinjaman/active/:userId → gabungkan semua pinjaman aktif
 app.get("/pinjaman/active/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    const activeLoan = await Loans.findOne({
+
+    // Ambil semua pinjaman aktif
+    const activeLoans = await Loans.find({
       userId,
-      status: "Disetujui" // or "Proses" if you want to show pending too
+      status: "Disetujui"
     });
 
-    if (!activeLoan) {
+    if (activeLoans.length === 0) {
       return res.status(404).json({ message: "Tidak ada pinjaman aktif" });
     }
 
+    // Hitung total cicilan per bulan
+    const totalCicilanPerBulan = activeLoans.reduce(
+      (sum, loan) => sum + (loan.totalCicilanPerBulan || 0),
+      0
+    );
+
+    // Untuk pokok dan bunga, juga bisa dijumlahkan
+    const totalPokok = activeLoans.reduce(
+      (sum, loan) => sum + (loan.jumlah || 0),
+      0
+    );
+    const totalBunga = activeLoans.reduce(
+      (sum, loan) => sum + (loan.bunga || 0),
+      0
+    );
+
+    const maxTotalAngsuran = Math.max(...activeLoans.map(l => l.totalAngsuran || 0));
+    const maxSisaAngsuran = Math.max(...activeLoans.map(l => l.sisaAngsuran || 0));
+
+
     return res.status(200).json({
-      pokok: activeLoan.jumlah,
-      bunga: activeLoan.bunga,
-      totalCicilanPerBulan: activeLoan.totalCicilanPerBulan,
-      sisaAngsuran: activeLoan.sisaAngsuran,
-      totalAngsuran: activeLoan.totalAngsuran
+      pokok: totalPokok,
+      bunga: totalBunga,
+      totalCicilanPerBulan: totalCicilanPerBulan,
+      sisaAngsuran: maxSisaAngsuran,
+      totalAngsuran: maxTotalAngsuran
     });
   } catch (error) {
     console.error("Error fetching active pinjaman:", error);
-    return res.status(500).json({ message: "Gagal mengambil data pinjaman" });
+    return res.status(500).json({ message: "Gagal mengambil data pinjaman aktif" });
   }
 });
 

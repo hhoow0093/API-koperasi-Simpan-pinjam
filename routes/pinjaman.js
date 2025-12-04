@@ -16,6 +16,5 @@ router.post("/apply", async (req, res) => {
   }
 });
 
-// Add other routes like /active/:userId, /history/:userId...
 
 export default router;
