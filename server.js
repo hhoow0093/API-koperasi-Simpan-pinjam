@@ -2,6 +2,7 @@ import express from "express";
 import User from "./models/user.js";
 import Loans from "./models/loans.js";
 import Saving from "./models/saving.js";
+import Transaction from "./models/transaction.js";
 import bcrypt from "bcrypt";
 
 const app = express();
@@ -185,26 +186,27 @@ app.put("/users/:id", async (req, res) => {
 app.post("/simpanan", async (req, res) => {
   try {
     const { userId, type, amount } = req.body;
-
-    if (!userId || !type || !amount) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const saving = new Saving({
-      userId,
-      type,
-      amount
-    });
-
+    const saving = new Saving({ userId, type, amount });
     await saving.save();
 
-    return res.status(201).json({
-      message: "Simpanan berhasil ditambahkan",
-      user_id: userId
+    //buat nambahin ke histori
+    const histori = new Transaction({
+      userId,
+      tanggal: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }),
+      jumlah: amount,
+      keterangan: `Simpanan ${type}`,
+      tipe: "SIMPANAN_MASUK"
     });
-  } catch (error) {
-    console.error("Error creating simpanan:", error);
-    return res.status(500).json({ message: "Gagal menambahkan simpanan" });
+    await histori.save();
+
+    return res.status(201).json({ message: "Simpanan berhasil", user_id: userId });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Gagal simpanan" });
   }
 });
 
@@ -261,6 +263,20 @@ app.post("/pinjaman/apply", async (req, res) => {
 
     await loan.save();
 
+    //buat nambahin ke histori
+    const histori = new Transaction({
+      userId,
+      tanggal: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }),
+      jumlah: jumlah,
+      keterangan: `Pinjaman`,
+      tipe: "PENGAJUAN_PINJAMAN"
+    });
+    await histori.save();
+
     return res.status(201).json({
       message: "Pengajuan pinjaman berhasil dikirim",
       user_id: userId
@@ -268,6 +284,42 @@ app.post("/pinjaman/apply", async (req, res) => {
   } catch (error) {
     console.error("Error creating pinjaman:", error);
     return res.status(500).json({ message: "Gagal mengajukan pinjaman" });
+  }
+});
+
+app.post("/pinjaman/bayar", async (req, res) => {
+  try {
+    const { userId, loanId, amount } = req.body;
+
+    //buat ngurangin sisa angsuran di loans
+    const loan = await Loans.findByIdAndUpdate(
+      loanId,
+      { $inc: { sisaAngsuran: -1 } },
+      { new: true }
+    );
+
+    if (!loan) {
+      return res.status(404).json({ message: "Pinjaman tidak ditemukan" });
+    }
+
+    //nambahin ke histori
+    const histori = new Transaction({
+      userId,
+      tanggal: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }),
+      jumlah: amount,
+      keterangan: `Pembayaran Angsuran Pinjaman`,
+      tipe: "BAYAR_ANGSURAN"
+    });
+    await histori.save();
+
+    return res.status(200).json({ message: "Pembayaran berhasil dicatat" });
+  } catch (error) {
+    console.error("Error bayar angsuran:", error);
+    return res.status(500).json({ message: "Gagal mencatat pembayaran" });
   }
 });
 
@@ -341,6 +393,19 @@ app.get("/pinjaman/history/:userId", async (req, res) => {
   } catch (error) {
     console.error("Error fetching pinjaman history:", error);
     return res.status(500).json({ message: "Gagal mengambil histori pinjaman" });
+  }
+});
+
+app.get("/transaksi/all/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const histori = await Transaction.find({ userId })
+      .sort({ createdAt: -1 }); // terbaru dulu
+
+    return res.status(200).json(histori);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json([]);
   }
 });
 

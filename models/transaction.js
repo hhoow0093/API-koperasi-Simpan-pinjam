@@ -1,3 +1,4 @@
+// models/Transaction.js
 import mongoose from "../db.js";
 
 const transactionSchema = new mongoose.Schema({
@@ -6,14 +7,16 @@ const transactionSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
-  tanggal: { type: String, required: true }, // e.g., "13 Okt 2025"
+  tanggal: { type: String, required: true }, // "13 Okt 2025"
   jumlah: { type: Number, required: true },
   keterangan: { type: String, required: true },
   tipe: {
     type: String,
-    enum: ["SIMPANAN_MASUK", "SIMPANAN_KELUAR", "BAYAR_ANGSURAN", "BAYAR_DENDA"],
+    enum: ["SIMPANAN_MASUK", "SIMPANAN_KELUAR", "PENGAJUAN_PINJAMAN", "BAYAR_ANGSURAN", "BAYAR_DENDA"],
     required: true
-  }
+  },
+  //ref ke savings
+  referenceId: { type: mongoose.Schema.Types.ObjectId }
 }, {
   timestamps: true
 });
