@@ -180,6 +180,148 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
+///INI UNTUK POST KE SIMPANAN
+// POST /simpanan → create new saving
+app.post("/simpanan", async (req, res) => {
+  try {
+    const { userId, type, amount } = req.body;
+
+    if (!userId || !type || !amount) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const saving = new Saving({
+      userId,
+      type,
+      amount
+    });
+
+    await saving.save();
+
+    return res.status(201).json({
+      message: "Simpanan berhasil ditambahkan",
+      user_id: userId
+    });
+  } catch (error) {
+    console.error("Error creating simpanan:", error);
+    return res.status(500).json({ message: "Gagal menambahkan simpanan" });
+  }
+});
+
+// GET /simpanan/user/:userId → get all savings + total balance
+app.get("/simpanan/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const savings = await Saving.find({ userId });
+
+    // Calculate total balance (KREDIT = +, but you're storing only deposits)
+    const totalSaldo = savings.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+    // Map to TransaksiSimpanan format
+    const riwayatTransaksi = savings.map((s) => ({
+      id: s._id.toString(),
+      tanggal: new Date(s.createdAt).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }),
+      keterangan: s.type,
+      jumlah: s.amount,
+      tipe: "KREDIT" // assuming all are deposits for now
+    }));
+
+    return res.status(200).json({ totalSaldo, riwayatTransaksi });
+  } catch (error) {
+    console.error("Error fetching simpanan:", error);
+    return res.status(500).json({ message: "Gagal mengambil data simpanan" });
+  }
+});
+
+///INI UNTUK POST KE PINJAMAN
+// POST /pinjaman/apply → submit loan application
+app.post("/pinjaman/apply", async (req, res) => {
+  try {
+    const { userId, jumlah, tenor } = req.body;
+
+    if (!userId || !jumlah || !tenor) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const loan = new Loans({
+      userId,
+      jumlah,
+      tenor,
+      status: "Proses", // default status
+      // You can add interest logic later
+      bunga: jumlah * 0.01, // example: 1% interest
+      totalCicilanPerBulan: (jumlah * 1.01) / tenor, // simple calc
+      sisaAngsuran: tenor,
+      totalAngsuran: tenor
+    });
+
+    await loan.save();
+
+    return res.status(201).json({
+      message: "Pengajuan pinjaman berhasil dikirim",
+      user_id: userId
+    });
+  } catch (error) {
+    console.error("Error creating pinjaman:", error);
+    return res.status(500).json({ message: "Gagal mengajukan pinjaman" });
+  }
+});
+
+// GET /pinjaman/active/:userId → get active loan
+app.get("/pinjaman/active/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const activeLoan = await Loans.findOne({
+      userId,
+      status: "Disetujui" // or "Proses" if you want to show pending too
+    });
+
+    if (!activeLoan) {
+      return res.status(404).json({ message: "Tidak ada pinjaman aktif" });
+    }
+
+    return res.status(200).json({
+      pokok: activeLoan.jumlah,
+      bunga: activeLoan.bunga,
+      totalCicilanPerBulan: activeLoan.totalCicilanPerBulan,
+      sisaAngsuran: activeLoan.sisaAngsuran,
+      totalAngsuran: activeLoan.totalAngsuran
+    });
+  } catch (error) {
+    console.error("Error fetching active pinjaman:", error);
+    return res.status(500).json({ message: "Gagal mengambil data pinjaman" });
+  }
+});
+
+// GET /pinjaman/history/:userId → get loan history
+app.get("/pinjaman/history/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const history = await Loans.find({ userId });
+
+    const pengajuanHistory = history.map((loan) => ({
+      id: loan._id.toString(),
+      tanggal: new Date(loan.createdAt).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }),
+      jumlah: loan.jumlah,
+      tenor: loan.tenor,
+      status: loan.status
+    }));
+
+    return res.status(200).json(pengajuanHistory);
+  } catch (error) {
+    console.error("Error fetching pinjaman history:", error);
+    return res.status(500).json({ message: "Gagal mengambil histori pinjaman" });
+  }
+});
+
 app.listen(3000, () => {
   console.log("server is running");
 });
@@ -189,7 +331,7 @@ app.listen(3000, () => {
 // ==============================================
 
 // user bisa melakukan simpanan pokok, wajib, dan sukarela
-app.post("/users/melakukan-simpanan/:id", async (req, res) => {
+app.post("/users/melakukan-simpanan/:id", async(req, res)=>{
 
 
 });
