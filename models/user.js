@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   gender: { type: String },
   date_birth: { type: Date },
   member_status: { type: Boolean, default: true },
+  profile_image: { type: String, default: null },
 });
 
 const User = mongoose.model("User", userSchema);
