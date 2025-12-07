@@ -4,7 +4,7 @@ import Loans from "./models/loans.js";
 import Saving from "./models/saving.js";
 import Transaction from "./models/transaction.js";
 import bcrypt from "bcrypt";
-import userRoutes from "./routes/userRoutes.js";
+import UserRoutesRouter from "./routes/UserRoutesRouter.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 // This allows the app to access http://localhost:3000/uploads/profile/image.jpg
 app.use("/uploads", express.static(path.join(__dirname, "uploads"))); 
 
-app.use(userRoutes);
+app.use(UserRoutesRouter);
 
 // 2. Dapat mencatat transaksi simpanan anggota (pokok, wajib, sukarela).
 // 3. Dapat memproses dan menyetujui pengajuan pinjaman anggota.
