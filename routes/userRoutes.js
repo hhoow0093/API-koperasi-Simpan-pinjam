@@ -1,5 +1,5 @@
 import express from "express";
-import User from "/models/User.js";
+import User from "../models/user.js";
 import multer from "multer";
 import path from "path";
 
@@ -19,9 +19,9 @@ const upload = multer({ storage: storage });
 
 
 // GET USER BY ID (untuk ProfilePage)
-router.get("/user/:id", async (req, res) => {
+router.get("/user/:userId", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(req.params.userId);
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -33,10 +33,10 @@ router.get("/user/:id", async (req, res) => {
 
 
 // UPDATE USER (tanpa ganti foto)
-router.put("/user/:id", async (req, res) => {
+router.put("/user/:userId", async (req, res) => {
   try {
     const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
+      req.params.userId,
       req.body,
       { new: true }
     );
@@ -50,7 +50,7 @@ router.put("/user/:id", async (req, res) => {
 
 //UPLOAD / UBAH FOTO PROFIL
 router.put(
-  "/user/:id/profile-photo",
+  "/user/:userId/profile-photo",
   upload.single("profile_image"),
   async (req, res) => {
     try {
@@ -59,7 +59,7 @@ router.put(
       const imageUrl = `/uploads/profile/${req.file.filename}`;
 
       const updatedUser = await User.findByIdAndUpdate(
-        req.params.id,
+        req.params.userId,
         { profile_image: imageUrl },
         { new: true }
       );
@@ -76,9 +76,9 @@ router.put(
 
 
 //DELETE USER
-router.delete("/user/:id", async (req, res) => {
+router.delete("/user/:userId", async (req, res) => {
   try {
-    await User.findByIdAndDelete(req.params.id);
+    await User.findByIdAndDelete(req.params.userId);
     res.json({ message: "User deleted" });
   } catch (err) {
     res.status(500).json({ message: "Error deleting user" });
