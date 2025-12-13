@@ -7,6 +7,9 @@ import bcrypt from "bcrypt";
 import UserRoutesRouter from "./routes/UserRoutesRouter.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import { Readable } from "stream";
+import { simpananBucket } from "./gridfs.js";
+import upload from "./upload.js";
 
 const app = express();
 app.use(express.json());
@@ -193,32 +196,63 @@ app.put("/users/:id", async (req, res) => {
 
 ///INI UNTUK POST KE SIMPANAN
 // POST /simpanan → create new saving
-app.post("/simpanan", async (req, res) => {
+app.post("/simpanan", upload.single("simpananImage"), async (req, res) => {
   try {
     const { userId, type, amount } = req.body;
-    const saving = new Saving({ userId, type, amount });
-    await saving.save();
 
-    //buat nambahin ke histori
-    const histori = new Transaction({
+    if (!userId || !type || !amount) {
+      return res.status(400).json({ message: "Data tidak lengkap" });
+    }
+
+    const saving = await Saving.create({ userId, type, amount });
+
+    if (req.file) {
+      const stream = Readable.from(req.file.buffer);
+
+      const uploadStream = simpananBucket.openUploadStream(
+        `simpanan-${saving._id}`, // UNIQUE
+        {
+          contentType: req.file.mimetype,
+          metadata: {
+            userId,
+            savingId: saving._id,
+            type: "SIMPANAN"
+          }
+        }
+      );
+
+      stream.pipe(uploadStream);
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      await Saving.findByIdAndUpdate(
+        saving._id,
+        { BuktiImagePembayaranDalamSimpananId: uploadStream.id }
+      );
+    }
+
+    await Transaction.create({
       userId,
-      tanggal: new Date().toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      }),
+      tanggal: new Date(),
       jumlah: amount,
       keterangan: `Simpanan ${type}`,
       tipe: "SIMPANAN_MASUK"
     });
-    await histori.save();
 
-    return res.status(201).json({ message: "Simpanan berhasil", user_id: userId });
+    return res.status(201).json({
+      message: "Simpanan berhasil",
+      savingId: saving._id
+    });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Gagal simpanan" });
   }
 });
+
 
 // GET /simpanan/user/:userId → get all savings + total balance
 app.get("/simpanan/user/:userId", async (req, res) => {

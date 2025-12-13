@@ -1,7 +1,7 @@
 import express from "express";
 import User from "../models/user.js";
 import upload from "../upload.js";
-import { transactionBucket, profileBucket } from "../gridfs.js";
+import { profileBucket } from "../gridfs.js";
 import { Readable } from "stream";
 import mongoose from "mongoose";
 

@@ -2,7 +2,7 @@ import mongoose from "./db.js";
 import { GridFSBucket } from "mongodb";
 
 let profileBucket;
-let transactionBucket;
+let simpananBucket;
 
 mongoose.connection.once("open", () => {
   profileBucket = new GridFSBucket(
@@ -10,12 +10,12 @@ mongoose.connection.once("open", () => {
     { bucketName: "profileImages" }
   );
 
-  transactionBucket = new GridFSBucket(
+  simpananBucket = new GridFSBucket(
     mongoose.connection.db,
-    { bucketName: "transactionImages" }
+    { bucketName: "simpananImages" }
   );
 
   console.log("🟢 GridFS buckets ready");
 });
 
-export { profileBucket, transactionBucket };
+export { profileBucket, simpananBucket };
