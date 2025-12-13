@@ -1,21 +1,13 @@
 import express from "express";
 import User from "../models/user.js";
-import multer from "multer";
-import path from "path";
+import upload from "../upload.js";
+import { transactionBucket, profileBucket } from "../gridfs.js";
+import { Readable } from "stream";
+import mongoose from "mongoose";
+
 
 const UserRoutesRouter = express.Router();
 
-// STORAGE UNTUK MULTER
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/profile/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname)); 
-  },
-});
-
-const upload = multer({ storage: storage });
 
 
 // GET USER BY ID (untuk ProfilePage)
@@ -47,32 +39,60 @@ const upload = multer({ storage: storage });
 });
 
 
-//UPLOAD / UBAH FOTO PROFIL
- UserRoutesRouter.put(
-  "/user/:userId/profile-photo",
-  upload.single("profile_image"),
+UserRoutesRouter.post(
+  "/user/:userId/upload-profile-image",
+  upload.single("image"),
   async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-      const imageUrl = `/uploads/profile/${req.file.filename}`;
+    const stream = Readable.from(req.file.buffer);
 
-      const updatedUser = await User.findByIdAndUpdate(
-        req.params.userId,
-        { profile_image: imageUrl },
-        { new: true }
-      );
+    const uploadStream = profileBucket.openUploadStream(
+      `profile-${req.params.userId}`,
+      { contentType: req.file.mimetype }
+    );
 
-      res.json({
-        message: "Profile photo updated successfully",
-        user: updatedUser,
+    stream.pipe(uploadStream);
+
+    uploadStream.on("finish", async () => {
+      await User.findByIdAndUpdate(req.params.userId, {
+        profileImageId: uploadStream.id
       });
-    } catch (err) {
-      res.status(500).json({ message: "Error uploading profile image" });
-    }
+
+      res.json({ message: "Profile image uploaded" });
+    });
   }
 );
 
+UserRoutesRouter.get("/user/:userId/profile-image", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Invalid userId" });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user || !user.profileImageId) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    const downloadStream = profileBucket.openDownloadStream(
+      user.profileImageId
+    );
+
+    downloadStream.on("error", () => {
+      res.status(404).json({ error: "Image not found" });
+    });
+
+    res.set("Content-Type", "image/jpeg");
+    downloadStream.pipe(res);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 //DELETE USER
  UserRoutesRouter.delete("/user/:userId", async (req, res) => {
