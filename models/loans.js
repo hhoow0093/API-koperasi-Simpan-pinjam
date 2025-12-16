@@ -1,5 +1,4 @@
 import mongoose from "../db.js";
-import User from "./user.js";
 
 const loanSchema = new mongoose.Schema({
   userId: {
@@ -11,7 +10,7 @@ const loanSchema = new mongoose.Schema({
   tenor: { type: Number, required: true },  // in months
   status: {
     type: String,
-    enum: ["Proses", "Disetujui", "Ditolak"],
+    enum: ["Proses", "Disetujui", "Ditolak", "Lunas"],
     default: "Proses"
   },
   // For active loan calculation
@@ -20,8 +19,11 @@ const loanSchema = new mongoose.Schema({
   sisaAngsuran: { type: Number },
   totalAngsuran: { type: Number },
   approvedAt: { type: Date },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  dendaKeterlembatan: { type: Number, default: 0 },
+  rejectionReason: { type: String }
+  
 });
 
-const Loan = mongoose.model("Loan", loanSchema);
-export default Loan;
+const Loans = mongoose.model("Loan", loanSchema);
+export default Loans;

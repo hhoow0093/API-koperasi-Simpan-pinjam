@@ -12,7 +12,7 @@ const transactionSchema = new mongoose.Schema({
   keterangan: { type: String, required: true },
   tipe: {
     type: String,
-    enum: ["SIMPANAN_MASUK", "SIMPANAN_KELUAR", "PENGAJUAN_PINJAMAN", "BAYAR_ANGSURAN", "BAYAR_DENDA"],
+    encum: ["SIMPANAN_MASUK", "SIMPANAN_KELUAR", "PENGAJUAN_PINJAMAN", "BAYAR_ANGSURAN", "BAYAR_DENDA"],
     required: true
   },
   //ref ke savings

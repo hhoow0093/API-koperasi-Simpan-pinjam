@@ -1,5 +1,4 @@
 import mongoose from "../db.js";
-import User from "./user.js";
 
 const savingSchema = new mongoose.Schema({
   userId: {

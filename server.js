@@ -8,9 +8,18 @@ import UserRoutesRouter from "./routes/UserRoutesRouter.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Readable } from "stream";
-import { simpananBucket } from "./gridfs.js";
+import { simpananBucket, buktiAngsuranBucket } from "./gridfs.js";
 import upload from "./upload.js";
+import mongoose from "./db.js";
+import { error } from "console";
+import PembayaranLoan from "./models/pembayaranLoans.js";
+import dotenv from "dotenv";
+import axios from "axios";
 
+dotenv.config();
+
+
+const MACHINE_LEARNING_IP_ADDRESS = process.env.IP_address_Machine_Learning;
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -30,6 +39,7 @@ app.use(UserRoutesRouter);
 // ==============================================
 // INI PAS UTS                                  |
 // ==============================================
+
 
 // mendapatkan jumlah user dalam aplikasi
 app.get("/users/count", async (req, res) => {
@@ -273,7 +283,16 @@ app.get("/simpanan/user/:userId", async (req, res) => {
       }),
       keterangan: s.type,
       jumlah: s.amount,
-      tipe: "KREDIT" // assuming all are deposits for now
+      tipe: "KREDIT",
+      // assuming all are deposits for now
+
+      buktiImageId: s.BuktiImagePembayaranDalamSimpananId
+    ? s.BuktiImagePembayaranDalamSimpananId.toString()
+    : null,
+
+    buktiImageUrl: s.BuktiImagePembayaranDalamSimpananId
+      ? `/simpanan/image/${s.BuktiImagePembayaranDalamSimpananId}`
+      : null
     }));
 
     return res.status(200).json({ totalSaldo, riwayatTransaksi });
@@ -282,6 +301,192 @@ app.get("/simpanan/user/:userId", async (req, res) => {
     return res.status(500).json({ message: "Gagal mengambil data simpanan" });
   }
 });
+
+app.get("/simpanan/image/:imageId", async (req, res) => {
+  try {
+    const imageId = new mongoose.Types.ObjectId(req.params.imageId);
+
+    const downloadStream = simpananBucket.openDownloadStream(imageId);
+
+    downloadStream.on("error", () => {
+      return res.status(404).json({ message: "Image not found" });
+    });
+
+    res.set("Content-Type", "image/jpeg"); // or from metadata
+    downloadStream.pipe(res);
+  } catch (err) {
+    return res.status(400).json({ message: "Invalid image id" });
+  }
+});
+
+app.delete("/simpanan/:simpananId", async (req, res) => { 
+    try {
+    const { simpananId } = req.params;
+
+    const deletedSimpanan = await Saving.findByIdAndDelete(simpananId);
+
+    if (!deletedSimpanan) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "simpanan deleted",
+    });
+      
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+})
+
+app.get("/pinjaman/list/:idNasabah", async (req, res) => { 
+  const { idNasabah } = req.params;
+  try { 
+    const userExist = await User.findById(idNasabah);
+    if (!userExist) { 
+       return res.status(400).json({nasabahLoans: [] , error: true, message: "user tidak ada!"})
+    }
+    const nasabahLoans = await Loans.find({ userId: idNasabah })
+    if (nasabahLoans.length === 0) { 
+      return res.status(400).json({nasabahLoans: [] , error: true, message: "userId tidak ada peminjaman"})
+    }
+      return res.status(200).json({ nasabahLoans, error: false, message: "pinjaman berhasil didapatkan dari nasabah" })
+  } catch (error) { 
+        console.error("error mendapatkan pinjaman nasabah:", error.message);
+        return res.status(500).json({ nasabahLoans: [] , error: true,message: error.message });
+  }
+})
+
+// PUT /pinjaman/approve/:loanId
+app.put("/pinjaman/approve/:loanId", async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const { bungaPersen, dendaPersen } = req.body;
+
+    const loan = await Loans.findById(loanId);
+    if (!loan) {
+      return res.status(404).json({ message: "Pinjaman tidak ditemukan" });
+    }
+
+    if (loan.status !== "Proses") {
+      return res.status(400).json({ message: "Pinjaman sudah diproses" });
+    }
+
+    // === CALCULATION ===
+    const bunga = (bungaPersen / 100) * loan.jumlah;
+    const totalPinjaman = loan.jumlah + bunga;
+    const cicilanPerBulan = totalPinjaman / loan.tenor;
+
+    loan.status = "Disetujui";
+    loan.bunga = bungaPersen;
+    loan.dendaKeterlembatan = dendaPersen;
+    loan.totalCicilanPerBulan = cicilanPerBulan;
+    loan.sisaAngsuran = loan.tenor;
+    loan.totalAngsuran = loan.tenor;
+    loan.approvedAt = new Date();
+
+    await loan.save();
+
+    return res.status(200).json({
+      message: "Pinjaman disetujui",
+      loan
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Gagal menyetujui pinjaman" });
+  }
+});
+
+// PUT /pinjaman/reject/:loanId
+app.put("/pinjaman/reject/:loanId", async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const { reason } = req.body; // optional rejection message
+
+    const loan = await Loans.findById(loanId);
+    if (!loan) {
+      return res.status(404).json({ message: "Pinjaman tidak ditemukan" });
+    }
+
+    if (loan.status !== "Proses") {
+      return res.status(400).json({ message: "Pinjaman sudah diproses" });
+    }
+
+    loan.status = "Ditolak";
+
+    // Optional (if you add this field later)
+    if (reason) {
+      loan.rejectionReason = reason;
+    }
+
+    await loan.save();
+
+    return res.status(200).json({
+      message: "Pinjaman berhasil ditolak",
+      loan
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Gagal menolak pinjaman" });
+  }
+});
+
+
+// GET /pembayaran-loan/by-loan/:loanId
+app.get("/pembayaran-loan/by-loan/:loanId", async (req, res) => {
+  try {
+    const { loanId } = req.params;
+
+    const pembayaranList = await PembayaranLoan.find({ loanId })
+      .sort({ createdAt: -1 }); // newest first
+
+    return res.status(200).json(pembayaranList);
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Gagal mengambil data pembayaran pinjaman"
+    });
+  }
+});
+
+// GET /pembayaran-loan/image/:imageId
+app.get("/pembayaran-loan/image/:Id", async (req, res) => {
+  try {
+    const { Id } = req.params;
+
+    const PembayaranLoanku = await PembayaranLoan.findById(Id); 
+
+    if (!PembayaranLoanku || !PembayaranLoanku.BuktiImagePembayaranDalamPinjamanId) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    const downloadStream = buktiAngsuranBucket.openDownloadStream(
+      PembayaranLoanku.BuktiImagePembayaranDalamPinjamanId
+    );
+
+    downloadStream.on("error", () => {
+      res.status(404).json({ error: "Image not found" });
+    });
+
+    res.set("Content-Type", "image/jpeg");
+    downloadStream.pipe(res);
+
+    res.set("Content-Type", "image/jpeg");
+    downloadStream.pipe(res);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Gagal mengambil gambar" });
+  }
+});
+
+
 
 ///INI UNTUK POST KE PINJAMAN
 // POST /pinjaman/apply → submit loan application
@@ -302,7 +507,7 @@ app.post("/pinjaman/apply", async (req, res) => {
       bunga: jumlah * 0.01, // example: 1% interest
       totalCicilanPerBulan: (jumlah * 1.01) / tenor, // simple calc
       sisaAngsuran: tenor,
-      totalAngsuran: tenor
+      totalAngsuran: tenor, 
     });
 
     await loan.save();
@@ -330,6 +535,80 @@ app.post("/pinjaman/apply", async (req, res) => {
     return res.status(500).json({ message: "Gagal mengajukan pinjaman" });
   }
 });
+
+app.post(
+  "/pinjaman/bayarAngsuran/:userId/:pinjamanId",
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const { userId, pinjamanId } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Bukti pembayaran wajib diunggah" });
+      }
+
+      const loan = await Loans.findOne({
+        _id: pinjamanId,
+        userId
+      });
+
+      if (!loan) {
+        return res.status(404).json({ message: "Pinjaman tidak ditemukan" });
+      }
+
+      if (loan.status === "Lunas") {
+        return res.status(400).json({ message: "Pinjaman sudah lunas" });
+      }
+
+      if (loan.sisaAngsuran <= 0) {
+        return res.status(400).json({ message: "Tidak ada angsuran tersisa" });
+      }
+
+      // 📤 Upload to GridFS
+      const uploadStream = buktiAngsuranBucket.openUploadStream(
+        `angsuran-${pinjamanId}-${Date.now()}`,
+        {
+          contentType: req.file.mimetype,
+          metadata: { userId, pinjamanId }
+        }
+      );
+
+      uploadStream.end(req.file.buffer);
+
+      uploadStream.on("finish", async () => {
+        // ✅ USE uploadStream.id
+        await PembayaranLoan.create({
+          userId,
+          loanId: pinjamanId,
+          BuktiImagePembayaranDalamPinjamanId: uploadStream.id
+        });
+
+        // ➖ decrement angsuran
+        loan.sisaAngsuran -= 1;
+
+        if (loan.sisaAngsuran === 0) {
+          loan.status = "Lunas";
+        }
+
+        await loan.save();
+
+        res.status(201).json({
+          message: "Angsuran berhasil dibayar"
+        });
+      });
+
+      uploadStream.on("error", (err) => {
+        console.error(err);
+        res.status(500).json({ message: "Gagal menyimpan bukti pembayaran" });
+      });
+
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
 
 app.post("/pinjaman/bayar", async (req, res) => {
   try {
@@ -377,6 +656,7 @@ app.get("/pinjaman/active/:userId", async (req, res) => {
       userId,
       status: "Disetujui"
     });
+    // console.log("pinjaman aktif: ", activeLoans);
 
     if (activeLoans.length === 0) {
       return res.status(404).json({ message: "Tidak ada pinjaman aktif" });
@@ -403,12 +683,15 @@ app.get("/pinjaman/active/:userId", async (req, res) => {
 
 
     return res.status(200).json({
+      id: activeLoans[0]._id,
+      size: activeLoans.length,
       pokok: totalPokok,
       bunga: totalBunga,
       totalCicilanPerBulan: totalCicilanPerBulan,
       sisaAngsuran: maxSisaAngsuran,
       totalAngsuran: maxTotalAngsuran
     });
+
   } catch (error) {
     console.error("Error fetching active pinjaman:", error);
     return res.status(500).json({ message: "Gagal mengambil data pinjaman aktif" });
@@ -453,16 +736,70 @@ app.get("/transaksi/all/:userId", async (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("server is running");
+app.post("/prediksi-machine-learning", async (req, res) => {
+  try {
+    const {
+      age,
+      income_per_month,
+      credit_point,
+      loan_occurrences_per_month
+    } = req.body;
+
+
+    // Basic validation
+    if (
+      age === undefined ||
+      income_per_month === undefined ||
+      credit_point === undefined ||
+      loan_occurrences_per_month === undefined
+    ) {
+      return res.status(400).json({
+        error: "Missing required fields"
+      });
+    }
+
+    // Call Flask ML API
+    const response = await axios.post(
+      `${MACHINE_LEARNING_IP_ADDRESS}/predict-default`,
+      {
+        age,
+        income_per_month,
+        credit_point,
+        loan_occurrences_per_month
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        timeout: 5000 // prevent hanging request
+      }
+    );
+
+    console.log("ML RESPONSE:", response.data);
+
+    // Forward ML response to client
+    return res.status(200).json({
+      success: true,
+      ml_result: response.data
+    });
+
+  } catch (err) {
+    console.error("ML API Error:", err.message);
+
+    if (err.response) {
+      // Flask returned an error
+      return res.status(err.response.status).json({
+        error: "Machine learning service error",
+        details: err.response.data
+      });
+    }
+
+    return res.status(500).json({
+      error: "Failed to connect to machine learning service"
+    });
+  }
 });
 
-// ==============================================
-// Backend untuk fitur ke 2                     |
-// ==============================================
-
-// user bisa melakukan simpanan pokok, wajib, dan sukarela
-app.post("/users/melakukan-simpanan/:id", async(req, res)=>{
-
-
+app.listen(3000, () => {
+  console.log("server is running");
 });
